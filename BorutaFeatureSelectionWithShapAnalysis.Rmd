@@ -1,0 +1,84 @@
+---
+title: "Boruta feature selection using xgBoost with SHAP analysis"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(anytime)
+library(e1071)
+library(glmnet)
+
+library(xgboost)
+library(DiagrammeR)
+library(ggplot2)
+library(hrbrthemes)
+library(viridis)
+library(ggrepel)
+library(SHAPforxgboost)
+library(forcats)
+library(Boruta)
+library(reshape2)
+
+setwd("G:/My Drive/WorkingDesk/GitHub page/BorutaFeatureSelectionWithShapAnalysis")
+
+load("scaled.train.test.RData")
+#xgb.mod=xgb.load("xgb_scaled.mod")
+#xgb.brouta=readRDS("xgb_scaled.boruta")
+```
+
+## GitHub Documents
+
+Assuming a tunned hyperparameter xgBoost algorithm is already fitted to a training data set, e.g., **classification_xgBoost.R** the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
+
+The paper proposed a new method to interpret the result of machine learning algorithms, particularyly boosting methods, that produce feature importance scores. They show that feature importance, although averaged over boosted trees, may be inconsistent for different observations. To overcome this inconsistency, they propose a SHAP score inspired by [Shapley values](http://www.library.fa.ru/files/Roth2.pdf#page=39) which combines different explanation models, e.g., LIME, with Shapley values. The result is a global feature importance score that is consistent across different test sets.
+
+However, other than to arbitrarily select an importance threshold beyond which features are considered unimportant, SHAP analysis does not offer an algorithmic way to filter a large feature set to a limited set of important features.
+
+To that end, a selection wrapper algorithm known as [Boruta](https://pdfs.semanticscholar.org/85a8/b1d9c52f9f795fda7e12376e751526953f38.pdf%3E) is proposed that iterates over an extended set of features and judges their importance. In each iteration of the algorithm, a number of features are copied by shuffling their values. This is used to fit another learner and to re-evaluate feature importances. If importance of an original feature is significantly greater than its shuffled copy's, that features is deemed important.
+
+## Including Code
+
+You can include R code in the document as follows:
+
+```{r boruta, eval=FALSE}
+xgb.brouta=Boruta(train.df,
+                  y=as.numeric(as.factor(label))-1,
+                  maxRuns=100, 
+                  doTrace=2,
+                  holdHistory=TRUE,
+                  getImp=getImpXgboost,
+                  max.depth=xgb.train$bestTune$max_depth, 
+                  eta=xgb.train$bestTune$eta, 
+                  nthread=4, 
+                  min_child_weight=xgb.train$bestTune$min_child_weight,
+                  scale_pos_weight=sumwneg/sumwpos, 
+                  eval_metric="auc", 
+                  eval_metric="rmse", 
+                  eval_metric="logloss",
+                  gamma=xgb.train$bestTune$gamma,
+                  nrounds=xgb.crv$best_iteration, 
+                  objective="binary:logistic",
+                  tree_method="hist",
+                  lambda=0,
+                  alpha=0)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
