@@ -32,13 +32,11 @@ library(reshape2)
 setwd("G:/My Drive/WorkingDesk/GitHub page/BorutaFeatureSelectionWithShapAnalysis")
 
 load("scaled.train.test.RData")
-#xgb.mod=xgb.load("xgb_scaled.mod")
-#xgb.brouta=readRDS("xgb_scaled.boruta")
+xgb.mod=readRDS("xgb_scaled.mod")
+xgb.boruta=readRDS("xgb_scaled.boruta")
 ```
 
-## GitHub Documents
-
-Assuming a tunned hyperparameter xgBoost algorithm is already fitted to a training data set, e.g., **classification_xgBoost.R** the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
+Assuming a tunned hyperparameter xgBoost algorithm is already fitted to a training data set, e.g., **classification_xgBoost.R**, the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
 
 The paper proposed a new method to interpret the result of machine learning algorithms, particularyly boosting methods, that produce feature importance scores. They show that feature importance, although averaged over boosted trees, may be inconsistent for different observations. To overcome this inconsistency, they propose a SHAP score inspired by [Shapley values](http://www.library.fa.ru/files/Roth2.pdf#page=39) which combines different explanation models, e.g., LIME, with Shapley values. The result is a global feature importance score that is consistent across different test sets.
 
@@ -46,12 +44,8 @@ However, other than to arbitrarily select an importance threshold beyond which f
 
 To that end, a selection wrapper algorithm known as [Boruta](https://pdfs.semanticscholar.org/85a8/b1d9c52f9f795fda7e12376e751526953f38.pdf%3E) is proposed that iterates over an extended set of features and judges their importance. In each iteration of the algorithm, a number of features are copied by shuffling their values. This is used to fit another learner and to re-evaluate feature importances. If importance of an original feature is significantly greater than its shuffled copy's, that features is deemed important.
 
-## Including Code
-
-You can include R code in the document as follows:
-
 ```{r boruta, eval=FALSE}
-xgb.brouta=Boruta(train.df,
+xgb.boruta=Boruta(train.df,
                   y=as.numeric(as.factor(label))-1,
                   maxRuns=100, 
                   doTrace=2,
@@ -73,12 +67,27 @@ xgb.brouta=Boruta(train.df,
                   alpha=0)
 ```
 
-## Including Plots
+Here, the <code>xgb.train</code> stores the result of a cross-validated grid search to tune xgBoost hyperparameter; see **classification_xgBoost.R**. <code>xgb.cv</code> stores the result of 500 iterations of xgBoost with optimized paramters to determine the best number of iterations.
 
-You can also embed plots, for example:
+After comparing feature importances, Boruta makes a decision about the importance of a variable. If the importance of the shuffled copy is greater than or equal to the importance of the original feature, the decision is to <code>reject</code> that feature. If the original feature's importance is significantly greater than its shuffled copy, then the decision is to <code>confirm</code> that feature. Otherwise, Boruta is <code>tentative</code> about the true feature importance and cannot make a confirmation or rejection decision.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r boruta_dec, echo=TRUE, eval=TRUE}
+#extract Boruta's decision
+boruta_dec=attStats(xgb.boruta)
+boruta_dec[boruta_dec$decision!="Rejected",]
+```
+
+For visualization purposes, here, the history of Boruta importance evaluation is extracted to plot a box and whiskers figure.
+
+```{r x, echo=TRUE, eval=FALSE}
+imp_features=row.names(boruta_dec)[which(boruta_dec$decision!="Rejected")]
+boruta.imp.df=as.data.frame(xgb.brouta$ImpHistory)
+boruta.imp.df=boruta.imp.df[,names(boruta.imp.df)%in%feature.imp]
+boruta.imp.df=melt(boruta.imp.df)
+boruta.imp.df=cbind.data.frame(boruta.imp.df, 
+                               decision=boruta.df$decision[match(boruta.imp.df$variable, 
+                                                                 row.names(boruta.df))])
+
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
