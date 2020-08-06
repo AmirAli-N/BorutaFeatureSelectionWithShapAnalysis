@@ -36,15 +36,16 @@ xgb.mod=readRDS("xgb_scaled.mod")
 xgb.boruta=readRDS("xgb_scaled.boruta")
 ```
 
-Assuming a tunned hyperparameter xgBoost algorithm is already fitted to a training data set, e.g., **classification_xgBoost.R**, the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
+Assuming a tunned xgBoost algorithm is already fitted to a training data set, e.g., [look at my own implementation](https://amirali-n.github.io/ExtremeGradientBoosting/), the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
 
-The paper proposed a new method to interpret the result of machine learning algorithms, particularyly boosting methods, that produce feature importance scores. They show that feature importance, although averaged over boosted trees, may be inconsistent for different observations. To overcome this inconsistency, they propose a SHAP score inspired by [Shapley values](http://www.library.fa.ru/files/Roth2.pdf#page=39) which combines different explanation models, e.g., LIME, with Shapley values. The result is a global feature importance score that is consistent across different test sets.
+Scott Lundberg's paper proposed a new method to interpret the result of machine learning algorithms, particularyly boosting methods, that produce feature importance scores. They show that feature importance, although averaged over boosted trees, may be inconsistent for different observations. To overcome this inconsistency, they propose a SHAP score inspired by [Shapley values](http://www.library.fa.ru/files/Roth2.pdf#page=39) which combines different explanation models, e.g., LIME, with Shapley values. The result is a global feature importance score that is consistent across different test sets.
 
 However, other than to arbitrarily select an importance threshold beyond which features are considered unimportant, SHAP analysis does not offer an algorithmic way to filter a large feature set to a limited set of important features.
 
-To that end, a selection wrapper algorithm known as [Boruta](https://pdfs.semanticscholar.org/85a8/b1d9c52f9f795fda7e12376e751526953f38.pdf%3E) is proposed that iterates over an extended set of features and judges their importance. In each iteration of the algorithm, a number of features are copied by shuffling their values. This is used to fit another learner and to re-evaluate feature importances. If importance of an original feature is significantly greater than its shuffled copy's, that features is deemed important.
+To that end, a selection wrapper algorithm known as [Boruta](https://pdfs.semanticscholar.org/85a8/b1d9c52f9f795fda7e12376e751526953f38.pdf%3E) is proposed that iterates over an extended set of features and judges their importance. In each iteration of the algorithm, a number of features are copied by shuffling their values. This is used to fit another learner and to re-evaluate feature importances. If importance of an original feature is significantly greater than its shuffled copy, that features is deemed important.
 
 ```{r boruta, eval=FALSE}
+library(Boruta)
 xgb.boruta=Boruta(train.df,
                   y=as.numeric(as.factor(label))-1,
                   maxRuns=100, 
@@ -69,7 +70,7 @@ xgb.boruta=Boruta(train.df,
 
 Here, the <code>xgb.train</code> stores the result of a cross-validated grid search to tune xgBoost hyperparameter; see **classification_xgBoost.R**. <code>xgb.cv</code> stores the result of 500 iterations of xgBoost with optimized paramters to determine the best number of iterations.
 
-After comparing feature importances, Boruta makes a decision about the importance of a variable. If the importance of the shuffled copy is greater than or equal to the importance of the original feature, the decision is to <code>reject</code> that feature. If the original feature's importance is significantly greater than its shuffled copy, then the decision is to <code>confirm</code> that feature. Otherwise, Boruta is <code>tentative</code> about the true feature importance and cannot make a confirmation or rejection decision.
+After comparing feature importances, Boruta makes a decision about the importance of a variable. If the importance of the shuffled copy is greater than or equal to the importance of the original feature, the decision is to <code>reject</code> that feature. If the original feature's importance is significantly greater than its shuffled copy, then the decision is to <code>confirm</code> that feature. Otherwise, Boruta is <code>tentative</code> about the true feature importance and cannot make a confirmation or rejection decision. Below, the result of 100 iterations of the Boruta algorithm is extracted. We see that only 6 features are confirmed and Boruta is not sure about the other 4 features.
 
 ```{r boruta_dec, echo=TRUE, eval=TRUE}
 #extract Boruta's decision
@@ -77,17 +78,66 @@ boruta_dec=attStats(xgb.boruta)
 boruta_dec[boruta_dec$decision!="Rejected",]
 ```
 
-For visualization purposes, here, the history of Boruta importance evaluation is extracted to plot a box and whiskers figure.
+For visualization purposes, here, the history of Boruta importance evaluation is extracted to generate a box and whiskers plot.
 
-```{r x, echo=TRUE, eval=FALSE}
+```{r boruta_history, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+#get the names of each feature
 imp_features=row.names(boruta_dec)[which(boruta_dec$decision!="Rejected")]
+#get feature importance history
 boruta.imp.df=as.data.frame(xgb.brouta$ImpHistory)
-boruta.imp.df=boruta.imp.df[,names(boruta.imp.df)%in%feature.imp]
+#keep only confirmed and tentative features
+boruta.imp.df=boruta.imp.df[,names(boruta.imp.df)%in%imp_features]
+#transform the data to a data frame with two columns: feature and importance value
 boruta.imp.df=melt(boruta.imp.df)
+#create a data frame by adding the decision for each feature as well
 boruta.imp.df=cbind.data.frame(boruta.imp.df, 
                                decision=boruta.df$decision[match(boruta.imp.df$variable, 
                                                                  row.names(boruta.df))])
-
+#reorder features data frame by the importance median value
+feature_order=with(boruta.imp.df, reorder(variable, value, median, order = TRUE))
+boruta.imp.df$variable=factor(boruta.imp.df$variable, levels = levels(feature_order))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r boruta_plot, echo=FALSE, eval=TRUE, warning=FALSE, fig.align="center", fig.height=7, fig.width=10}
+boruta.feat=c("Lane closure", "Work length", "Collision density", 
+              "Truck AADT", "Closure length", "ADT", "Peak AADT",
+              "AADT", "Work duration", "Closure coverage")
+ggplot(data = boruta.imp.df, aes(x=variable, y=value, fill=decision))+
+  geom_boxplot()+
+  coord_flip()+
+  theme_ipsum(axis_title_just = "center")+
+  theme(plot.title = element_blank(),
+        axis.text.x = element_text(hjust = 0.5, 
+                                   size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        axis.title.x = element_text(size = 18, 
+                                    family = "Century Gothic", 
+                                    color = "black",
+                                    margin = margin(15, 0, 0, 0)),
+        axis.text.y = element_text(size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        axis.title.y = element_text(size=18, 
+                                    family = "Century Gothic", 
+                                    color = "black",
+                                    margin = margin(0, 15, 0, 0)),
+        axis.line.x = element_line(size=1.2),
+        axis.line.y = element_line(size=1.2),
+        legend.title = element_text(size=18, 
+                                    family = "Century Gothic", 
+                                    color = "black"),
+        legend.text = element_text(size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        legend.position = "top")+
+  scale_x_discrete(labels=rev(boruta.feat))+
+  xlab("Features")+
+  ylab("Boruta Importance")
+```
+
+The feature importances are plotted using ggplot <code>geom_boxplot</code>. They show that lane closure, work length, and collision density are the top three important features. Boruta is very effective in reducing the number of features from more than 700 to just 10. However, these importances may not be consistent with respect to the test set. SHAP values take the each data point into consideration when evaluating the importance of a feature.
+
+```{r shap_values, echo=TRUE, eval=FALSE}
+
+```
