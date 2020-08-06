@@ -3,8 +3,8 @@ title: "Boruta feature selection using xgBoost with SHAP analysis"
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
- encoding=encoding,
- output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 output: html_document
 ---
 
@@ -36,7 +36,7 @@ xgb.mod=readRDS("xgb_scaled.mod")
 xgb.boruta=readRDS("xgb_scaled.boruta")
 ```
 
-Assuming a tunned xgBoost algorithm is already fitted to a training data set, e.g., [look at my own implementation](https://amirali-n.github.io/ExtremeGradientBoosting/), the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
+Assuming a tunned xgBoost algorithm is already fitted to a training data set, (e.g., [look at my own implementation](https://amirali-n.github.io/ExtremeGradientBoosting/)) the next step is to identify feature importances. Although, feature importances can be evalutated directly from the boosted trees, these importances have been shown to be local and inconsistent; see [Scott Lundberg et. al. (2019)](https://arxiv.org/abs/1905.04610).
 
 Scott Lundberg's paper proposed a new method to interpret the result of machine learning algorithms, particularyly boosting methods, that produce feature importance scores. They show that feature importance, although averaged over boosted trees, may be inconsistent for different observations. To overcome this inconsistency, they propose a SHAP score inspired by [Shapley values](http://www.library.fa.ru/files/Roth2.pdf#page=39) which combines different explanation models, e.g., LIME, with Shapley values. The result is a global feature importance score that is consistent across different test sets.
 
@@ -139,6 +139,7 @@ ggplot(data = boruta.imp.df, aes(x=variable, y=value, fill=decision))+
 The feature importances are plotted using ggplot <code>geom_boxplot</code>. They show that lane closure, work length, and collision density are the top three important features. Boruta is very effective in reducing the number of features from more than 700 to just 10. However, these importances may not be consistent with respect to the test set. SHAP values take each data point into consideration when evaluating the importance of a feature. The below code snippet, takes the outcome of an xgBoost fitted model in <code>xgb.mod</code> and evaluates its SHAP values. 
 
 ```{r shap_values, echo=TRUE, eval=FALSE}
+library(SHAPforxgboost)
 shap_values=shap.values(xgb_model = xgb.mod, X_train = dtest)
 shap_values$mean_shap_score[1:10]
 ```
