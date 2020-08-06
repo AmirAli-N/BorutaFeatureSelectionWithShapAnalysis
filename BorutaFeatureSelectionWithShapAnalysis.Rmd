@@ -136,8 +136,87 @@ ggplot(data = boruta.imp.df, aes(x=variable, y=value, fill=decision))+
   ylab("Boruta Importance")
 ```
 
-The feature importances are plotted using ggplot <code>geom_boxplot</code>. They show that lane closure, work length, and collision density are the top three important features. Boruta is very effective in reducing the number of features from more than 700 to just 10. However, these importances may not be consistent with respect to the test set. SHAP values take the each data point into consideration when evaluating the importance of a feature.
+The feature importances are plotted using ggplot <code>geom_boxplot</code>. They show that lane closure, work length, and collision density are the top three important features. Boruta is very effective in reducing the number of features from more than 700 to just 10. However, these importances may not be consistent with respect to the test set. SHAP values take each data point into consideration when evaluating the importance of a feature. The below code snippet, takes the outcome of an xgBoost fitted model in <code>xgb.mod</code> and evaluates its SHAP values. 
 
 ```{r shap_values, echo=TRUE, eval=FALSE}
-
+shap_values=shap.values(xgb_model = xgb.mod, X_train = dtest)
+shap_values$mean_shap_score[1:10]
 ```
+```{r shap_score, echo=FALSE, eval=TRUE}
+shap_values$mean_shap_score[1:10]
+```
+
+It can be seen the the top 10 most important features of the SHAP tree explainer do not agree with the Boruta algorithm. Although, some features are important according to both methods, SHAP values consider new features such as <code>route 219</code>, <code>activity D41000</code>, or <code>county SB to SLO</code> as important in predicting the class of the test set data point. Furthermore, the order of importance for those features which re deemed as importance by both methods is not consistent. The code snippet below limits the shap score and test set to the features selected by the Boruta method and plots SHAP values for each data point in test set diluted by a factor of 20. 
+
+```{r shap_boruta, echo=TRUE, eval=FALSE}
+shap.feat=unique(boruta.imp.df$variable)
+X=data.frame(as.matrix(dtest))
+X=X[, names(X) %in% shap.feat]
+
+#removing outliers for better visualization
+inliers=which(X$work_duration<=0.2 & X$work_duration>=0 &
+              X$work_length<=0.4 & X$work_length>=0 &
+              X$road_adt<=0.8 & X$road_adt>=0 &
+              X$peak_aadt<=0.3 & X$peak_aadt>=0 &
+              X$aadt<=0.8 & X$aadt>=0 &
+              X$truck_aadt<=0.4 & X$truck_aadt>=0 &
+              X$collision_density11_12<=0.6 & X$collision_density11_12>=0 &
+              X$closure_coverage<=1 & X$closure_coverage>=0 &
+              X$closure_length<=0.2 & X$closure_length>=0)
+
+#shap summary for boruta features
+shap_score_filtered=data.frame(shap_values$shap_score)
+shap_score_filtered=shap_score_filtered[inliers, names(shap_score_filtered) %in% shap.feat]
+
+#plot
+shap.plot.summary.wrap2(shap_score = shap_score_filtered, 
+                        X = X[inliers,],
+                        dilute=20)
+```
+
+```{r shap_plot, echo=FALSE, eval=TRUE, fig.align="center", fig.height=7, fig.width=10, warning=FALSE, message=FALSE}
+pp=shap.plot.summary.wrap2(shap_score = shap_score_filtered, 
+                        X = X[inliers,],
+                        dilute=20)
+shap.names=c("Truck AADT", "Closure length", "AADT", "Work length",
+             "Closure coverage", "Collision density", "Work duration",
+             "ADT", "Lane closure", "Peak AADT")
+pp+theme_ipsum(axis_title_just = "center")+
+  theme(plot.title = element_blank(),
+        axis.text.x = element_text(hjust = 0.5, 
+                                   size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        axis.title.x = element_text(size = 18, 
+                                    family = "Century Gothic", 
+                                    color = "black",
+                                    margin = margin(15, 0, 0, 0)),
+        axis.text.y = element_text(size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        axis.title.y = element_text(size=18, 
+                                    family = "Century Gothic", 
+                                    color = "black",
+                                    margin = margin(0, 15, 0, 0)),
+        axis.line.x = element_line(size=1.2),
+        axis.line.y = element_line(size=1.2),
+        legend.title = element_text(size=18, 
+                                    family = "Century Gothic", 
+                                    color = "black"),
+        legend.text = element_text(size=18, 
+                                   family = "Century Gothic", 
+                                   color = "black"),
+        legend.position = "right")+
+  scale_x_discrete(labels=rev(shap.names), limits=rev(levels(pp$data$variable)))+
+  xlab("Features")+
+  ylab("Shapley Values")+
+  guides(colour=guide_colorbar(title = "Feature Value",
+                               title.position = "top",
+                               label.position = "left",
+                               barwidth = 0.2,
+                               barheight = 30))
+```
+
+The SHAP summary plots shows that considering only the features selected by Boruta does not resolve the difference between SHAP values and Boruta importances. The resulting order of feautre importances is completely different in SHAP tree explainer method. However, assuming features selected by Boruta are actually the most important features, the SHAP summary plot allows us to see how each feature contributes to the classification process. For example, consider the case of <code>Lane closure</code> feature. The shop summary plot shows that higher values of Lane closure (i.e., Lane closure = 1) increase the probability of the positive class (which in this case denotes the probability of collision with roadside work zones). This analysis could be usefull if we had more confidence in the selected features and their importances.
+
+To reconcile Boruta and SHAP analysis, a combination of these methods may be the solution. An algorithm that copies the features and shuffles their values, but evaluates the importance of the original and its copy using Shapley values, and tests whether original importance of a feature is significantly greater that its shuffled copy. This can be done by a library in python known as [BorutaShap](https://pypi.org/project/BorutaShap/). Here is my implementation of the algorithm in python.
