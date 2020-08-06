@@ -337,7 +337,7 @@ boruta.imp.df=cbind.data.frame(boruta.imp.df,
 
 #rename the features
 boruta.feat=c("Work duration", "Work length", "ADT", "Peak AADT",
-              "AADT", "Truck AADT", "Collision density", "Lane closure = 1", 
+              "AADT", "Truck AADT", "Collision density", "Lane closure", 
               "Closure coverage", "Closure length")
 fac=with(boruta.imp.df, reorder(variable, value, median, order = TRUE))
 boruta.imp.df$variable=factor(boruta.imp.df$variable, levels = levels(fac))
@@ -370,20 +370,16 @@ ggplot(data = boruta.imp.df, aes(x=variable, y=value, fill=decision))+
                                    family = "Century Gothic", 
                                    color = "black"),
         legend.position = "top")+
-  scale_x_discrete(labels=boruta.feat)+
+  #scale_x_discrete(labels=boruta.feat)+
   xlab("Features")+
   ylab("Boruta Importance")
 
 ####################################################################
 #shap analysis for Boruta features from a full model on the test set
 #evaluate shap values
-#
-#attach("./bin/PMRF paper/xgb.boruta.RData", pos = 2)
-#xgb.brouta=xgb.brouta
-#detach("file:./bin/PMRF paper/xgb.boruta.RData")
-#
+
 shap_values=shap.values(xgb_model = xgb.mod, X_train = dtest)
-shap_values$mean_shap_score
+shap_values$mean_shap_score[1:10]
 shap.feat=unique(boruta.imp.df$variable)
 X=as.matrix(dtest)
 X=as.data.frame(X)
