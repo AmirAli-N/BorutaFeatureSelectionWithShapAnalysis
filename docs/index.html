@@ -391,7 +391,7 @@ xgb.boruta=Boruta(train.df,
                   tree_method=&quot;hist&quot;,
                   lambda=0,
                   alpha=0)</code></pre>
-<p>Here, the <code>xgb.train</code> stores the result of a cross-validated grid search to tune xgBoost hyperparameter; see <strong>classification_xgBoost.R</strong>. <code>xgb.cv</code> stores the result of 500 iterations of xgBoost with optimized paramters to determine the best number of iterations.</p>
+<p>Here, the <code>xgb.train</code> stores the result of a cross-validated grid search to tune xgBoost hyperparameter; see <strong>Boruta_xgBoost_SHAP.R</strong> in <a href="https://github.com/AmirAli-N/BorutaFeatureSelectionWithShapAnalysis">this repository</a>. <code>xgb.cv</code> stores the result of 500 iterations of xgBoost with optimized paramters to determine the best number of iterations.</p>
 <p>After comparing feature importances, Boruta makes a decision about the importance of a variable. If the importance of the shuffled copy is greater than or equal to the importance of the original feature, the decision is to <code>reject</code> that feature. If the original feature’s importance is significantly greater than its shuffled copy, then the decision is to <code>confirm</code> that feature. Otherwise, Boruta is <code>tentative</code> about the true feature importance and cannot make a confirmation or rejection decision. Below, the result of 100 iterations of the Boruta algorithm is extracted. We see that only 6 features are confirmed and Boruta is not sure about the other 4 features.</p>
 <pre class="r"><code>#extract Boruta&#39;s decision
 boruta_dec=attStats(xgb.boruta)
