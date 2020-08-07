@@ -2,8 +2,8 @@ Boruta feature selection using xgBoost with SHAP analysis
 ================
 
 Assuming a tunned xgBoost algorithm is already fitted to a training data
-set, e.g., [look at my own
-implementation](https://amirali-n.github.io/ExtremeGradientBoosting/),
+set (e.g., [look at my own
+implementation](https://amirali-n.github.io/ExtremeGradientBoosting/)),
 the next step is to identify feature importances. Although, feature
 importances can be evalutated directly from the boosted trees, these
 importances have been shown to be local and inconsistent; see [Scott
